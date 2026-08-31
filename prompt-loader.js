@@ -6,7 +6,7 @@ class PromptLoader {
     this.prompts = new Map();
     this.promptsLoaded = false;
     this.skillPromptSent = new Set();
-    // Focus only on DSA
+    // Skills that inject a programming language into their prompt
     this.skillsRequiringProgrammingLanguage = ['dsa'];
   }
 
@@ -28,10 +28,8 @@ class PromptLoader {
       for (const file of files) {
         if (file.endsWith('.md')) {
           const skillName = path.basename(file, '.md');
-          if (skillName !== 'dsa') continue; // only keep DSA
           const filePath = path.join(promptsDir, file);
           const promptContent = fs.readFileSync(filePath, 'utf8');
-          
           this.prompts.set(skillName, promptContent);
         }
       }
@@ -328,6 +326,21 @@ STRICT REQUIREMENTS:
       'data-structures': 'dsa',
       'algorithms': 'dsa',
       'data-structures-algorithms': 'dsa',
+      'sql': 'sql',
+      'database': 'sql',
+      'mysql': 'sql',
+      'postgresql': 'sql',
+      'queries': 'sql',
+      'aptitude': 'aptitude',
+      'quant': 'aptitude',
+      'quantitative': 'aptitude',
+      'reasoning': 'aptitude',
+      'logical': 'aptitude',
+      'technical': 'technical',
+      'cs-fundamentals': 'technical',
+      'os': 'technical',
+      'networking': 'technical',
+      'operating-systems': 'technical',
       'behavioral': 'behavioral',
       'behavioral-interview': 'behavioral',
       'behavior': 'behavioral',
@@ -368,7 +381,7 @@ STRICT REQUIREMENTS:
     if (!this.promptsLoaded) {
       this.loadPrompts();
     }
-    return ['dsa'];
+    return Array.from(this.prompts.keys());
   }
 
   /**

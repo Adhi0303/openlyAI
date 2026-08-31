@@ -287,6 +287,7 @@ class WindowManager {
       alwaysOnTop: true,
       visibleOnAllWorkspaces: true,
       fullscreenable: false,
+      hiddenInMissionControl: true, // Hide from macOS Mission Control/Expose
       // Platform-specific always-on-top settings
       ...(process.platform === 'darwin' && {
         level: 'floating' // Start with floating level for macOS
@@ -438,6 +439,7 @@ class WindowManager {
         parent: null,
         modal: false,
         thickFrame: false,
+        type: 'toolbar', // Applies WS_EX_TOOLWINDOW to hide from Alt+Tab
       };
     }
 
@@ -514,6 +516,7 @@ class WindowManager {
         });
 
         // When resized (by user or programmatically), keep bound windows aligned at top
+        // — but only if the user hasn't manually repositioned the window.
         window.on('resize', () => {
           if (this.bindWindows) {
             this.positionBoundWindows();
@@ -1333,6 +1336,34 @@ class WindowManager {
     }
   }
 
+  toggleLLMResponse() {
+    const llmWindow = this.windows.get('llmResponse');
+    if (!llmWindow || llmWindow.isDestroyed()) return;
+    if (llmWindow.isVisible()) {
+      llmWindow.hide();
+      logger.info('LLM response window hidden via shortcut');
+    } else {
+      this.showOnCurrentDesktop(llmWindow);
+      logger.info('LLM response window shown via shortcut');
+    }
+  }
+
+  // Toggles ONLY the main navbar — chat, settings, and LLM response are unaffected.
+  toggleMainWindow() {
+    if (this.isScreenBeingShared) return;
+    const mainWindow = this.windows.get('main');
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isVisible()) {
+      mainWindow.hide();
+      this.isVisible = false;
+      logger.info('Main navbar hidden via shortcut');
+    } else {
+      this.showOnCurrentDesktop(mainWindow);
+      this.isVisible = true;
+      logger.info('Main navbar shown via shortcut');
+    }
+  }
+
   showSettings() {
     if (this.isScreenBeingShared) return;
 
@@ -1347,6 +1378,18 @@ class WindowManager {
       }, 50);
       
       logger.info('Settings window displayed at top');
+    }
+  }
+
+  toggleSettings() {
+    if (this.isScreenBeingShared) return;
+    const settingsWindow = this.windows.get('settings');
+    if (!settingsWindow || settingsWindow.isDestroyed()) return;
+    if (settingsWindow.isVisible()) {
+      settingsWindow.hide();
+      logger.info('Settings window hidden via shortcut');
+    } else {
+      this.showSettings();
     }
   }
 

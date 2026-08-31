@@ -32,13 +32,18 @@
         color: rgba(255, 255, 255, 0.9);
         font-size: 11px;
         font-weight: 600;
-        -webkit-app-region: drag;
+        -webkit-app-region: no-drag;
         flex-wrap: nowrap;
         overflow: visible;
         border: 1px solid rgba(255, 255, 255, 0.15);
-  width: 100%;
-  /* Allow horizontal collapse to approximately one icon's width */
-  min-width: 60px;
+        width: 100%;
+        /* Allow horizontal collapse to approximately one icon's width */
+        min-width: 60px;
+        cursor: grab;
+        user-select: none;
+      }
+      .command-tab.dragging {
+        cursor: grabbing;
       }
 
       .command-item {
@@ -101,6 +106,31 @@
         background: rgba(96, 165, 250, 0.18);
         color: #93c5fd;
         box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.25) inset;
+      }
+
+      /* Drag handle */
+      #dragHandle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.35);
+        font-size: 14px;
+        cursor: grab;
+        -webkit-app-region: drag;
+        transition: color 0.2s ease, background 0.2s ease;
+        flex-shrink: 0;
+        letter-spacing: -1px;
+      }
+      #dragHandle:hover {
+        color: rgba(255, 255, 255, 0.75);
+        background: rgba(255, 255, 255, 0.08);
+      }
+      #dragHandle:active {
+        cursor: grabbing;
+        color: rgba(255, 255, 255, 0.9);
       }
 
       .command-separator {

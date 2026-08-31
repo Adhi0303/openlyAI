@@ -381,24 +381,6 @@ class MainWindowUI {
                 this.toggleShortcutsPopover();
             });
 
-            // Hover to show
-            this.infoButton.addEventListener('mouseenter', () => {
-                if (!this.isInteractive) return;
-                this.showShortcutsPopover();
-            });
-            // Queue hide when leaving the button
-            this.infoButton.addEventListener('mouseleave', () => this.queueHideShortcutsPopover());
-
-            // Keep open when hovering popover
-            this.shortcutsPopover.addEventListener('mouseenter', () => {
-                if (this._popoverHideTimeout) {
-                    clearTimeout(this._popoverHideTimeout);
-                    this._popoverHideTimeout = null;
-                }
-            });
-            // Hide after a small delay when leaving popover
-            this.shortcutsPopover.addEventListener('mouseleave', () => this.queueHideShortcutsPopover());
-
             // Close on outside click
             document.addEventListener('click', (e) => {
                 if (!this.shortcutsPopover) return;
@@ -415,6 +397,69 @@ class MainWindowUI {
                 }
             });
         }
+
+        // ── Whole-bar drag ──────────────────────────────────────────────
+        // Pressing and holding anywhere on the command-tab (except on an
+        // interactive child like a button or select) lets the user drag
+        // the entire overlay window to any position on screen.
+        const commandTab = document.querySelector('.command-tab');
+        if (commandTab && window.electronAPI && window.electronAPI.moveWindow) {
+            let dragging = false;
+            let lastX = 0;
+            let lastY = 0;
+
+            const INTERACTIVE_TAGS = new Set(['BUTTON', 'SELECT', 'INPUT', 'TEXTAREA', 'A']);
+            const INTERACTIVE_IDS  = new Set(['micButton', 'skillIndicator', 'infoButton',
+                                              'settingsIndicator', 'languageSelector', 'codingLanguage']);
+
+            const isInteractiveTarget = (el) => {
+                // Walk up from the clicked element to the bar
+                let node = el;
+                while (node && node !== commandTab) {
+                    if (INTERACTIVE_TAGS.has(node.tagName)) return true;
+                    if (node.id && INTERACTIVE_IDS.has(node.id)) return true;
+                    // Any element that carries its own click handler is interactive
+                    if (node.classList && node.classList.contains('command-item') &&
+                        node.id && node.id !== '') return true;
+                    node = node.parentElement;
+                }
+                return false;
+            };
+
+            commandTab.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;          // left button only
+                if (isInteractiveTarget(e.target)) return;
+                dragging = true;
+                lastX = e.screenX;
+                lastY = e.screenY;
+                commandTab.classList.add('dragging');
+                e.preventDefault();
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!dragging) return;
+                const dx = e.screenX - lastX;
+                const dy = e.screenY - lastY;
+                lastX = e.screenX;
+                lastY = e.screenY;
+                if (dx !== 0 || dy !== 0) {
+                    window.electronAPI.moveWindow(dx, dy);
+                }
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (!dragging) return;
+                dragging = false;
+                commandTab.classList.remove('dragging');
+            });
+
+            // Safety: cancel drag if mouse leaves the window entirely
+            window.addEventListener('mouseleave', () => {
+                dragging = false;
+                commandTab.classList.remove('dragging');
+            });
+        }
+        // ────────────────────────────────────────────────────────────────
     }
 
     setupEventListeners() {
@@ -520,7 +565,10 @@ class MainWindowUI {
         const skill = data.skill || data.metadata?.skill || 'General';
         const skillNames = {
             'dsa': 'DSA',
-            'behavioral': 'Behavioral', 
+            'sql': 'SQL',
+            'aptitude': 'Aptitude',
+            'technical': 'Technical',
+            'behavioral': 'Behavioral',
             'sales': 'Sales',
             'presentation': 'Presentation',
             'data-science': 'Data Science',

@@ -390,23 +390,42 @@ class ApplicationController {
 
   setupGlobalShortcuts() {
     const shortcuts = {
+      // Screenshot → send to active skill
       "CommandOrControl+Shift+S": () => this.triggerScreenshotOCR(),
-      "CommandOrControl+Shift+V": () => windowManager.toggleVisibility(),
-      "CommandOrControl+Shift+I": () => windowManager.toggleInteraction(),
+
+      // Navbar only — chat/settings/AI box are NOT affected
+      "CommandOrControl+Shift+V": () => windowManager.toggleMainWindow(),
+
+      // Settings panel — open/close independently
+      "CommandOrControl+,": () => windowManager.toggleSettings(),
+
+      // Chat panel — open/close independently
       "CommandOrControl+Shift+C": () => windowManager.switchToWindow("chat"),
-      "CommandOrControl+Shift+\\": () => this.clearSessionMemory(),
-      "CommandOrControl+,": () => windowManager.showSettings(),
+
+      // AI answer box — show/hide independently
+      "CommandOrControl+Shift+X": () => windowManager.toggleLLMResponse(),
+
+      // Interaction / click-through toggle
+      "CommandOrControl+Shift+I": () => windowManager.toggleInteraction(),
       "Alt+A": () => windowManager.toggleInteraction(),
+
+      // Clear conversation memory
+      "CommandOrControl+Shift+\\": () => this.clearSessionMemory(),
+
+      // Speech recognition
       "Alt+R": () => this.toggleSpeechRecognition(),
+
+      // Always-on-top utilities
       "CommandOrControl+Shift+T": () => windowManager.forceAlwaysOnTopForAllWindows(),
       "CommandOrControl+Shift+Alt+T": () => {
         const results = windowManager.testAlwaysOnTopForAllWindows();
         logger.info('Always-on-top test triggered via shortcut', results);
       },
-      // Context-sensitive shortcuts based on interaction mode
-      "CommandOrControl+Up": () => this.handleUpArrow(),
-      "CommandOrControl+Down": () => this.handleDownArrow(),
-      "CommandOrControl+Left": () => this.handleLeftArrow(),
+
+      // Skill navigation (Up/Down) and window nudge (when non-interactive)
+      "CommandOrControl+Up":    () => this.handleUpArrow(),
+      "CommandOrControl+Down":  () => this.handleDownArrow(),
+      "CommandOrControl+Left":  () => this.handleLeftArrow(),
       "CommandOrControl+Right": () => this.handleRightArrow(),
     };
 
@@ -583,15 +602,16 @@ class ApplicationController {
     ipcMain.handle("move-window", (event, { deltaX, deltaY }) => {
       const mainWindow = windowManager.getWindow("main");
       if (mainWindow) {
-        const [currentX, currentY] = mainWindow.getPosition();
-        const newX = currentX + deltaX;
-        const newY = currentY + deltaY;
-        mainWindow.setPosition(newX, newY);
-        logger.debug("Main window moved", {
-          deltaX,
-          deltaY,
-          from: { x: currentX, y: currentY },
-          to: { x: newX, y: newY },
+        // Disable auto-positioning so the bar stays where the user drops it
+        windowManager.bindWindows = false;
+
+        const [mainX, mainY] = mainWindow.getPosition();
+        mainWindow.setPosition(mainX + deltaX, mainY + deltaY);
+
+        logger.debug("Main window moved (free drag)", {
+          deltaX, deltaY,
+          from: { x: mainX, y: mainY },
+          to:   { x: mainX + deltaX, y: mainY + deltaY },
         });
       }
       return { success: true };
@@ -1028,31 +1048,29 @@ class ApplicationController {
   }
 
   navigateSkill(direction) {
-    const availableSkills = [
-      "dsa",
-    ];
+    const { promptLoader } = require('./prompt-loader');
+    const availableSkills = promptLoader.getAvailableSkills();
 
     const currentIndex = availableSkills.indexOf(this.activeSkill);
     if (currentIndex === -1) {
-      logger.warn("Current skill not found in available skills", {
-        currentSkill: this.activeSkill,
-        availableSkills,
-      });
+      // If somehow the active skill isn't in the list, just set the first one
+      this.activeSkill = availableSkills[0];
+      sessionManager.setActiveSkill(this.activeSkill);
+      windowManager.broadcastToAllWindows("skill-updated", { skill: this.activeSkill });
       return;
     }
 
     // Calculate new index with wrapping
     let newIndex = currentIndex + direction;
     if (newIndex >= availableSkills.length) {
-      newIndex = 0; // Wrap to beginning
+      newIndex = 0;
     } else if (newIndex < 0) {
-      newIndex = availableSkills.length - 1; // Wrap to end
+      newIndex = availableSkills.length - 1;
     }
 
     const newSkill = availableSkills[newIndex];
     this.activeSkill = newSkill;
 
-    // Update session manager with the new skill
     sessionManager.setActiveSkill(newSkill);
 
     logger.info("Skill navigated via global shortcut", {
@@ -1061,7 +1079,6 @@ class ApplicationController {
       direction: direction > 0 ? "down" : "up",
     });
 
-    // Broadcast the skill change to all windows
     windowManager.broadcastToAllWindows("skill-updated", { skill: newSkill });
   }
 
@@ -1087,8 +1104,8 @@ class ApplicationController {
       // Use image directly with LLM and active skill; do not send chat messages here
       const sessionHistory = sessionManager.getOptimizedHistory();
 
-      const skillsRequiringProgrammingLanguage = ['dsa'];
-      const needsProgrammingLanguage = skillsRequiringProgrammingLanguage.includes(this.activeSkill);
+      const { promptLoader } = require('./prompt-loader');
+      const needsProgrammingLanguage = promptLoader.requiresProgrammingLanguage(this.activeSkill);
 
       this._responseSeq = (this._responseSeq || 0) + 1;
       const messageId = `img-${Date.now()}-${this._responseSeq}`;
@@ -1153,8 +1170,8 @@ class ApplicationController {
       sessionManager.addUserInput(text, 'llm_input');
 
       // Check if current skill needs programming language context
-      const skillsRequiringProgrammingLanguage = ['dsa'];
-      const needsProgrammingLanguage = skillsRequiringProgrammingLanguage.includes(this.activeSkill);
+      const { promptLoader } = require('./prompt-loader');
+      const needsProgrammingLanguage = promptLoader.requiresProgrammingLanguage(this.activeSkill);
 
       this._responseSeq = (this._responseSeq || 0) + 1;
       const messageId = `chat-${Date.now()}-${this._responseSeq}`;

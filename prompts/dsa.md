@@ -7,6 +7,7 @@ STRICT RULES
 - Use triple backticks with the correct language tag.
 - Prefer O(n) or O(n log n) where feasible; call out if optimal lower bound is higher.
 - if there's some pre-code or template in Question then strictly use that template to answer it.
+- Dont make it look too ai generated code 
 - Avoid extra commentary; be concise and implementation-focused.
 - Your code must not contain any comments.
 
