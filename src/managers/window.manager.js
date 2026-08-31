@@ -439,7 +439,6 @@ class WindowManager {
         parent: null,
         modal: false,
         thickFrame: false,
-        type: 'toolbar', // Applies WS_EX_TOOLWINDOW to hide from Alt+Tab
       };
     }
 
