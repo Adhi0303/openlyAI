@@ -118,6 +118,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onRecordingStopped: (callback) => ipcRenderer.on('recording-stopped', callback),
   onCodingLanguageChanged: (callback) => ipcRenderer.on('coding-language-changed', callback),
   onMainWindowShown: (callback) => ipcRenderer.on('main-window-shown', callback),
+  // Clipboard-relay chat input (no tab-switch: Ctrl+Shift+. to hint, Ctrl+Shift+/ to send)
+  onChatActivateInput: (callback) => ipcRenderer.on('chat-activate-input', callback),
+  onChatSendClipboard: (callback) => ipcRenderer.on('chat-send-clipboard', callback),
   
   // Generic receive method
   receive: (channel, callback) => ipcRenderer.on(channel, callback),

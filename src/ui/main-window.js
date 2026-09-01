@@ -338,22 +338,22 @@ class MainWindowUI {
         // Language dropdown
         this.languageSelect = document.getElementById('codingLanguage');
         if (this.languageSelect) {
-            // Set default to C++ if no value is set
-            this.languageSelect.value = 'cpp';
+            // Default to Python
+            this.languageSelect.value = 'python';
             
             // Initialize with current setting
             if (window.electronAPI && window.electronAPI.getSettings) {
                 window.electronAPI.getSettings().then(settings => {
-                    if (settings && settings.codingLanguage) {
-                        this.languageSelect.value = settings.codingLanguage;
+                    const saved = settings && settings.codingLanguage;
+                    // Treat 'cpp' as the old default — migrate first-timers to Python
+                    if (saved && saved !== 'cpp') {
+                        this.languageSelect.value = saved;
                     } else {
-                        // Save C++ as default if no language is set
-                        this.languageSelect.value = 'cpp';
-                        window.electronAPI.saveSettings({ codingLanguage: 'cpp' });
+                        this.languageSelect.value = 'python';
+                        window.electronAPI.saveSettings({ codingLanguage: 'python' });
                     }
                 }).catch(() => {
-                    // Fallback to C++ on error
-                    this.languageSelect.value = 'cpp';
+                    this.languageSelect.value = 'python';
                 });
             }
 

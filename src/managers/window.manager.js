@@ -152,7 +152,7 @@ class WindowManager {
         mainWindow.setAlwaysOnTop(true, 'floating', 2);
       }
     } else {
-      mainWindow.setAlwaysOnTop(true);
+      mainWindow.setAlwaysOnTop(true, 'screen-saver');
     }
     
     // Wait for app to fully initialize and detect current desktop
@@ -169,7 +169,7 @@ class WindowManager {
           mainWindow.setAlwaysOnTop(true, 'floating', 2);
         }
       } else {
-        mainWindow.setAlwaysOnTop(true);
+        mainWindow.setAlwaysOnTop(true, 'screen-saver');
       }
     }
     
@@ -359,7 +359,9 @@ class WindowManager {
         hasShadow: false,
         useContentSize: windowConfig.useContentSize || false,
         thickFrame: false,
-        focusable: true,
+        // focusable: false — navbar only has buttons, no text input needed.
+        // Prevents stealing focus from Chrome (which triggers tab-switch warnings).
+        focusable: false,
         ...(process.platform === 'darwin' && {
           titleBarStyle: 'hiddenInset',
           trafficLightPosition: { x: -100, y: -100 },
@@ -382,6 +384,9 @@ class WindowManager {
         closable: false,
         hasShadow: false,
         thickFrame: false,
+        // focusable: false — only displays content, no text input needed.
+        // Prevents stealing focus from Chrome (which triggers tab-switch warnings).
+        focusable: false,
         ...(process.platform === 'darwin' && {
           titleBarStyle: 'hiddenInset',
           trafficLightPosition: { x: -100, y: -100 },
@@ -405,6 +410,7 @@ class WindowManager {
         maximizable: false,
         closable: false,
         hasShadow: true,
+        focusable: false,
         ...(process.platform === 'darwin' && {
           titleBarStyle: 'hiddenInset',
           trafficLightPosition: { x: -100, y: -100 },
@@ -593,20 +599,9 @@ class WindowManager {
         window.setAlwaysOnTop(true);
       }
     } else if (process.platform === 'win32') {
-      // Windows: Multiple enforcement attempts
-      window.setAlwaysOnTop(true);
-      
-      setTimeout(() => {
-        if (!window.isDestroyed()) {
-          window.setAlwaysOnTop(true);
-        }
-      }, 100);
-      
-      setTimeout(() => {
-        if (!window.isDestroyed()) {
-          window.setAlwaysOnTop(true);
-        }
-      }, 500);
+      // Windows: screen-saver level is the highest z-order — stays above
+      // Chrome's exclusive fullscreen mode.
+      window.setAlwaysOnTop(true, 'screen-saver');
       
     } else {
       // Linux and other platforms
@@ -649,7 +644,9 @@ class WindowManager {
               }
             }, 50);
           } else {
-            window.setAlwaysOnTop(true);
+            // screen-saver is the highest z-order level — the ONLY level
+            // that reliably stays above Chrome's exclusive fullscreen.
+            window.setAlwaysOnTop(true, 'screen-saver');
           }
         } catch (error) {
           logger.debug('Error in enforceAlwaysOnTop', { error: error.message });
@@ -677,14 +674,16 @@ class WindowManager {
       setTimeout(enforceAlwaysOnTop, 50);
     });
     
-    // Periodic enforcement every 3 seconds (more frequent)
+    // Periodic enforcement every 2 seconds — the "watchdog" that keeps
+    // us above Chrome's fullscreen.  Chrome actively reclaims top position,
+    // so we must periodically re-assert screen-saver level.
     const periodicEnforcement = setInterval(() => {
       if (window.isDestroyed()) {
         clearInterval(periodicEnforcement);
         return;
       }
       enforceAlwaysOnTop();
-    }, 3000);
+    }, 2000);
     
     logger.debug('Applied enhanced stealth measures with aggressive always-on-top', {
       type,
@@ -865,17 +864,22 @@ class WindowManager {
         }, 300);
       }, 50);
     } else {
-      // Linux/Windows
+      // Linux/Windows — use showInactive() so we NEVER steal focus from
+      // Chrome or any other full-screen / proctored application.  Stealing
+      // focus triggers the "tab switch" warning in proctored assessments.
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-      win.setAlwaysOnTop(true);
-      win.show();
-      win.focus();
+
+      // screen-saver is the highest z-order level — the ONLY one that
+      // reliably stays above Chrome's exclusive fullscreen.
+      win.setAlwaysOnTop(true, 'screen-saver');
+      win.showInactive();   // visible WITHOUT taking keyboard focus
+
       setTimeout(() => {
         if (win.isDestroyed()) return;
         if (!isLLM) {
           win.setVisibleOnAllWorkspaces(false);
         }
-        win.setAlwaysOnTop(true);
+        win.setAlwaysOnTop(true, 'screen-saver');
       }, 500);
     }
 
@@ -1067,10 +1071,8 @@ class WindowManager {
     });
     
     this.isVisible = true;
-    const activeWindow = this.windows.get(this.activeWindow);
-    if (activeWindow) {
-      activeWindow.focus();
-    }
+    // Do NOT call .focus() here — it would steal focus from Chrome
+    // and trigger proctoring "tab switch" warnings.
     
     logger.info('All windows shown on current desktop', { 
       activeWindow: this.activeWindow,

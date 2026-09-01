@@ -1,7 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const { fileURLToPath } = require("url");
-const { app, BrowserWindow, globalShortcut, session, ipcMain } = require("electron");
+const { app, BrowserWindow, globalShortcut, session, ipcMain, clipboard } = require("electron");
 
 // ── Resolve a stable .env location ──
 // In packaged builds process.cwd() is unstable and frequently read-only
@@ -427,11 +427,93 @@ class ApplicationController {
       "CommandOrControl+Down":  () => this.handleDownArrow(),
       "CommandOrControl+Left":  () => this.handleLeftArrow(),
       "CommandOrControl+Right": () => this.handleRightArrow(),
+
+      // ── Clipboard-relay chat input (no tab-switch) ─────────────────────
+      // Ctrl+Shift+. → show hint in chat: "type anywhere, copy, then press Ctrl+Shift+/"
+      "CommandOrControl+Shift+.": () => this.chatActivateInput(),
+      // Ctrl+Shift+/ → read OS clipboard and send it as a chat message
+      "CommandOrControl+Shift+/": () => this.chatSendClipboard(),
     };
 
     Object.entries(shortcuts).forEach(([accelerator, handler]) => {
       const success = globalShortcut.register(accelerator, handler);
       logger.debug("Global shortcut registered", { accelerator, success });
+    });
+  }
+
+  /**
+   * Ctrl+Shift+. — enter typing mode.
+   *
+   * Makes the chat window temporarily focusable and focuses it so the user
+   * can type directly in the textarea.  This causes ONE deliberate tab-switch
+   * (the user explicitly chose to type).  Focus is returned to Chrome when
+   * Ctrl+Shift+/ is pressed.
+   */
+  chatActivateInput() {
+    const chatWin = windowManager.getWindow('chat');
+    if (!chatWin || chatWin.isDestroyed()) return;
+
+    // Ensure chat is visible
+    windowManager.switchToWindow('chat');
+
+    // Temporarily make focusable so the OS delivers keyboard events
+    chatWin.setFocusable(true);
+
+    // Focus the Electron window (this causes one tab-switch — intentional)
+    chatWin.focus();
+
+    // Focus the textarea inside the renderer
+    chatWin.webContents.executeJavaScript(`
+      (function() {
+        const inp = document.getElementById('messageInput');
+        if (inp) {
+          inp.placeholder = 'Type your message here…';
+          inp.focus();
+        }
+      })();
+    `).catch(() => {});
+
+    // Tell renderer to show the "typing mode" hint
+    chatWin.webContents.send('chat-activate-input');
+    logger.info('Chat typing mode activated via Ctrl+Shift+. (one intentional tab-switch)');
+  }
+
+  /**
+   * Ctrl+Shift+/ — send whatever is in the chat textarea, then return
+   * OS focus to Chrome and lock the window back to non-focusable.
+   *
+   * Reading the textarea value happens inside the renderer process via
+   * executeJavaScript, so no clipboard is involved and no extra tab-switch
+   * fires (Chrome regaining focus does not increment the proctoring counter).
+   */
+  chatSendClipboard() {
+    const chatWin = windowManager.getWindow('chat');
+    if (!chatWin || chatWin.isDestroyed()) return;
+
+    // Read text from textarea and send it, then restore non-focusable state
+    chatWin.webContents.executeJavaScript(
+      `document.getElementById('messageInput') ? document.getElementById('messageInput').value : ''`
+    ).then(text => {
+      const trimmed = (text || '').trim();
+
+      // Return focus to Chrome and re-lock the window immediately
+      chatWin.blur();
+      setTimeout(() => {
+        if (!chatWin.isDestroyed()) chatWin.setFocusable(false);
+      }, 100);
+
+      if (!trimmed) {
+        logger.debug('Ctrl+Shift+/ pressed but textarea is empty');
+        return;
+      }
+
+      // Deliver to renderer for display + LLM processing
+      chatWin.webContents.send('chat-send-clipboard', { text: trimmed });
+      logger.info('Chat message sent via Ctrl+Shift+/', { length: trimmed.length });
+    }).catch(err => {
+      logger.warn('chatSendClipboard: executeJavaScript failed', { err: err.message });
+      chatWin.blur();
+      if (!chatWin.isDestroyed()) chatWin.setFocusable(false);
     });
   }
 
@@ -478,6 +560,15 @@ class ApplicationController {
   ipcMain.handle("take-screenshot", () => this.triggerScreenshotOCR());
   ipcMain.handle("list-displays", () => captureService.listDisplays());
   ipcMain.handle("capture-area", (event, options) => captureService.captureAndProcess(options));
+
+  // Chat typing mode cancel (Esc in renderer) — blur window and re-lock non-focusable
+  ipcMain.handle("chat-cancel-input", () => {
+    const chatWin = windowManager.getWindow('chat');
+    if (chatWin && !chatWin.isDestroyed()) {
+      chatWin.blur();
+      setTimeout(() => { if (!chatWin.isDestroyed()) chatWin.setFocusable(false); }, 100);
+    }
+  });
     
     // Provide reliable clipboard write via main process
     ipcMain.handle("copy-to-clipboard", (event, text) => {

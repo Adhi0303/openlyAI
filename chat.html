@@ -411,6 +411,37 @@
         font-size: 0.72em;
         line-height: 0;
       }
+      /* Clipboard-relay input hint banner */
+      .clipboard-hint {
+        display: none;
+        align-items: flex-start;
+        gap: 10px;
+        margin: 0 16px 8px;
+        padding: 10px 14px;
+        background: rgba(245, 158, 11, 0.15);
+        border: 1px solid rgba(245, 158, 11, 0.4);
+        border-radius: 8px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.9);
+        line-height: 1.5;
+        animation: hint-pulse 2s ease-in-out 3;
+        -webkit-app-region: no-drag;
+      }
+      .clipboard-hint-icon { font-size: 18px; flex-shrink: 0; }
+      .clipboard-hint-text kbd {
+        display: inline-block;
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.25);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 11px;
+        font-family: inherit;
+        color: #fbbf24;
+      }
+      @keyframes hint-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        50%       { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25); }
+      }
       .chat-input {
         padding: 16px 20px;
         border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -693,11 +724,19 @@
 
       <div class="chat-messages" id="chatMessages"></div>
 
+      <!-- Typing mode hint (shown by Ctrl+Shift+., hidden after send/dismiss) -->
+      <div id="clipboardHint" class="clipboard-hint" style="display:none">
+        <span class="clipboard-hint-icon">⌨️</span>
+        <span class="clipboard-hint-text">
+          <strong>Typing Mode ON</strong> — type your message below, then press <kbd>Ctrl+Shift+/</kbd> to send and return focus to Chrome &mdash; or press <kbd>Esc</kbd> to cancel
+        </span>
+      </div>
+
       <div class="chat-input">
         <div class="input-container">
           <textarea
             class="input-field"
-            placeholder="Type a message… (Shift+Enter for newline)"
+            placeholder="Use Ctrl+Shift+. to enter input mode, then Ctrl+Shift+/ to send"
             id="messageInput"
             rows="1"
           ></textarea>
@@ -1314,6 +1353,70 @@
       // Initialize
       if (!chatHistory || chatHistory.length === 0) {
         addMessage('Recording in Progress. press Alt+R to stop recording.', 'system');
+      }
+
+      // ── Clipboard-relay chat input (Ctrl+Shift+. / Ctrl+Shift+/) ─────────
+      // This is the zero-tab-switch way to type while the chat window is
+      // focusable:false.  Main process reads the clipboard and sends it here.
+      const clipboardHint = document.getElementById('clipboardHint');
+      let clipboardHintTimer = null;
+
+      function showClipboardHint() {
+        if (!clipboardHint) return;
+        clipboardHint.style.display = 'flex';
+        // Auto-dismiss after 30 s if user forgets
+        clearTimeout(clipboardHintTimer);
+        clipboardHintTimer = setTimeout(hideClipboardHint, 30000);
+      }
+
+      function hideClipboardHint() {
+        if (!clipboardHint) return;
+        clipboardHint.style.display = 'none';
+        clearTimeout(clipboardHintTimer);
+      }
+
+      // Esc key — cancel typing mode: hide hint and tell main to return focus
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          hideClipboardHint();
+          // Ask main process to blur our window and re-lock to non-focusable
+          if (whysperAPI && whysperAPI.receive) {
+            // Use the generic send channel — handled by chatSendClipboard with empty text
+            window.electronAPI && window.electronAPI.invoke && window.electronAPI.invoke('chat-cancel-input');
+          }
+        }
+      });
+
+      // Ctrl+Shift+. → main process tells us to show the hint
+      if (whysperAPI && whysperAPI.onChatActivateInput) {
+        whysperAPI.onChatActivateInput(() => {
+          showClipboardHint();
+        });
+      }
+
+      // Ctrl+Shift+/ → main process delivers clipboard text; we send it
+      if (whysperAPI && whysperAPI.onChatSendClipboard) {
+        whysperAPI.onChatSendClipboard(async (event, data) => {
+          const text = (data && data.text) ? data.text.trim() : '';
+          if (!text) return;
+
+          hideClipboardHint();
+
+          // Show user message in chat
+          addMessage(text, 'user');
+          if (messageInput) messageInput.value = '';
+
+          setTimeout(() => showThinkingIndicator(), 300);
+
+          try {
+            if (whysperAPI && whysperAPI.sendChatMessage) {
+              await whysperAPI.sendChatMessage(text);
+            }
+          } catch (err) {
+            console.error('Clipboard relay send failed:', err);
+            addMessage('Failed to send message.', 'error');
+          }
+        });
       }
     </script>
   </body>
