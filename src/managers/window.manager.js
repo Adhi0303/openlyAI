@@ -871,6 +871,8 @@ class WindowManager {
 
       // screen-saver is the highest z-order level — the ONLY one that
       // reliably stays above Chrome's exclusive fullscreen.
+      // Toggle alwaysOnTop off then on to force Windows to restack the z-order above exclusive fullscreen apps.
+      win.setAlwaysOnTop(false);
       win.setAlwaysOnTop(true, 'screen-saver');
       win.showInactive();   // visible WITHOUT taking keyboard focus
 
@@ -879,6 +881,7 @@ class WindowManager {
         if (!isLLM) {
           win.setVisibleOnAllWorkspaces(false);
         }
+        win.setAlwaysOnTop(false);
         win.setAlwaysOnTop(true, 'screen-saver');
       }, 500);
     }
