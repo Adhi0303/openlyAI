@@ -566,16 +566,16 @@ class MainWindowUI {
         const skillNames = {
             'dsa': 'DSA',
             'sql': 'SQL',
-            'aptitude': 'Aptitude',
-            'technical': 'Technical',
-            'behavioral': 'Behavioral',
-            'sales': 'Sales',
-            'presentation': 'Presentation',
-            'data-science': 'Data Science',
-            'programming': 'Programming',
-            'devops': 'DevOps',
-            'system-design': 'System Design',
-            'negotiation': 'Negotiation'
+            'aptitude': 'APT',
+            'technical': 'TEC',
+            'behavioral': 'BEH',
+            'sales': 'SAL',
+            'presentation': 'PRE',
+            'data-science': 'DS',
+            'programming': 'PRG',
+            'devops': 'DEV',
+            'system-design': 'SYS',
+            'negotiation': 'NEG'
         };
         
         const displaySkill = skillNames[skill] || skill.toUpperCase();
@@ -807,14 +807,17 @@ class MainWindowUI {
     updateSkillIndicator() {
         const skillNames = {
             'dsa': 'DSA',
-            'behavioral': 'Behavioral', 
-            'sales': 'Sales',
-            'presentation': 'Presentation',
-            'data-science': 'Data Science',
-            'programming': 'Programming',
-            'devops': 'DevOps',
-            'system-design': 'System Design',
-            'negotiation': 'Negotiation'
+            'sql': 'SQL',
+            'aptitude': 'APT',
+            'technical': 'TEC',
+            'behavioral': 'BEH', 
+            'sales': 'SAL',
+            'presentation': 'PRE',
+            'data-science': 'DS',
+            'programming': 'PRG',
+            'devops': 'DEV',
+            'system-design': 'SYS',
+            'negotiation': 'NEG'
         };
         
         logger.info('Updating skill indicator', {
@@ -920,14 +923,17 @@ class MainWindowUI {
     showSkillChangeNotification(skill, direction) {
         const skillNames = {
             'dsa': 'DSA',
-            'behavioral': 'Behavioral', 
-            'sales': 'Sales',
-            'presentation': 'Presentation',
-            'data-science': 'Data Science',
-            'programming': 'Programming',
-            'devops': 'DevOps',
-            'system-design': 'System Design',
-            'negotiation': 'Negotiation'
+            'sql': 'SQL',
+            'aptitude': 'APT',
+            'technical': 'TEC',
+            'behavioral': 'BEH', 
+            'sales': 'SAL',
+            'presentation': 'PRE',
+            'data-science': 'DS',
+            'programming': 'PRG',
+            'devops': 'DEV',
+            'system-design': 'SYS',
+            'negotiation': 'NEG'
         };
         
         const displayName = skillNames[skill] || skill.toUpperCase();

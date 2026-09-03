@@ -27,7 +27,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 16px;
+        gap: 6px;
         padding: 0 12px;
         color: rgba(255, 255, 255, 0.9);
         font-size: 11px;
@@ -52,7 +52,7 @@
         gap: 8px;
         padding: 6px 10px;
         border-radius: 6px;
-        color: rgba(255, 255, 255, 0.9);
+        color: rgba(255, 255, 255, 0.4);
         font-size: 12px;
         cursor: pointer;
         transition: all 0.2s ease;
@@ -63,6 +63,7 @@
 
       .command-item:hover {
         background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.9);
       }
 
       .command-item i {
@@ -148,21 +149,20 @@
       .status-dot {
         width: 8px;
         height: 8px;
-        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.2);
+        margin: 0 2px;
         transition: all 0.3s ease;
         position: relative;
-  flex-shrink: 0;
+        flex-shrink: 0;
       }
 
       .status-dot.interactive {
-        background-color: #10b981; /* Green for active/interactive */
-        box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
-        animation: pulse-green 2s infinite;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.4);
       }
 
       .status-dot.non-interactive {
-        background: #f44336;
-        box-shadow: 0 0 10px rgba(244, 67, 54, 0.692);
+        border-radius: 1px;
       }
 
       .hidden-indicator {
@@ -225,7 +225,7 @@
         background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: 4px;
-        color: rgba(255, 255, 255, 0.95);
+        color: rgba(255, 255, 255, 0.4);
         font-size: 11px;
         font-weight: 600;
         outline: none;
@@ -383,9 +383,8 @@
   </head>
   <body>
     <div class="command-tab">
-      <div class="command-item">
+      <div class="command-item" id="screenshotButton" title="Screenshot (Ctrl+Shift+S)">
         <i class="fas fa-camera"></i>
-        <span>⌘⇧S</span>
       </div>
       <div class="command-separator"></div>
       <div class="command-item" id="micButton">
@@ -393,18 +392,16 @@
       </div>
       <div class="command-separator"></div>
       <div class="command-item" id="skillIndicator">
-        <i class="fas fa-brain"></i>
         <span>DSA</span>
       </div>
       <div class="command-separator"></div>
       <div class="command-item" id="languageSelector">
-        <i class="fas fa-code"></i>
         <select id="codingLanguage">
-          <option value="python" selected>Python</option>
+          <option value="python" selected>Py</option>
           <option value="cpp">C++</option>
           <option value="c">C</option>
           <option value="java">Java</option>
-          <option value="javascript">JavaScript</option>
+          <option value="javascript">JS</option>
         </select>
       </div>
       <div class="command-separator"></div>
