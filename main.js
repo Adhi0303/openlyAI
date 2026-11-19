@@ -1129,7 +1129,6 @@ class ApplicationController {
     } else {
       try {
         speechService.startRecording();
-        windowManager.showChatWindow();
         logger.info("Speech recognition started via global shortcut");
       } catch (error) {
         logger.error("Error starting speech recognition:", error);

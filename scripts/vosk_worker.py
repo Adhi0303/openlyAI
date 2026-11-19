@@ -24,10 +24,29 @@ def send(payload):
 def init_recognizer(model_path=None):
     global model, recognizer
     try:
-        if model_path and os.path.exists(model_path):
-            model = vosk.Model(model_path)
-        else:
-            # Uses locally cached small en-us model or auto-downloads
+        # Candidate locations: explicit override, env var, or local project model
+        candidate_paths = []
+        if model_path:
+            candidate_paths.append(model_path)
+        
+        env_path = os.environ.get('VOSK_MODEL_PATH')
+        if env_path:
+            candidate_paths.append(env_path)
+
+        project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        candidate_paths.append(os.path.join(project_dir, '.vosk-models', 'vosk-model-en-us-0.22-lgraph'))
+        candidate_paths.append(os.path.join(project_dir, '.vosk-models', 'model'))
+
+        loaded = False
+        for p in candidate_paths:
+            if p and os.path.exists(p):
+                sys.stderr.write(f"Loading Vosk model from: {p}\n")
+                sys.stderr.flush()
+                model = vosk.Model(p)
+                loaded = True
+                break
+
+        if not loaded:
             model = vosk.Model(lang="en-us")
         
         recognizer = vosk.KaldiRecognizer(model, sample_rate)
