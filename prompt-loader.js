@@ -21,10 +21,10 @@ class PromptLoader {
     // In packaged builds asar-unpacked files are still reachable through
     // their original path thanks to Electron's fs patching.
     const promptsDir = path.join(__dirname, 'prompts');
-    
+
     try {
       const files = fs.readdirSync(promptsDir);
-      
+
       for (const file of files) {
         if (file.endsWith('.md')) {
           const skillName = path.basename(file, '.md');
@@ -33,9 +33,9 @@ class PromptLoader {
           this.prompts.set(skillName, promptContent);
         }
       }
-      
+
       this.promptsLoaded = true;
-      
+
     } catch (error) {
       console.error('Error loading skill prompts:', error);
       throw new Error(`Failed to load skill prompts: ${error.message}`);
@@ -55,7 +55,7 @@ class PromptLoader {
 
     const normalizedSkillName = this.normalizeSkillName(skillName);
     let promptContent = this.prompts.get(normalizedSkillName);
-    
+
     if (!promptContent) {
       return null;
     }
@@ -82,9 +82,9 @@ class PromptLoader {
     const languageTitle = languageMap[norm] || (programmingLanguage.charAt(0).toUpperCase() + programmingLanguage.slice(1));
     const fenceTag = fenceTagMap[norm] || norm || 'text';
     const languageUpper = (languageMap[norm] || languageTitle).toUpperCase();
-    
+
     let languageInjection = '';
-    
+
     switch (skillName) {
       case 'dsa':
         languageInjection = `\n\n## IMPLEMENTATION LANGUAGE: ${languageUpper}
@@ -120,14 +120,14 @@ STRICT REQUIREMENTS:
    */
   shouldSendAsModelMemory(skillName, storedMemory) {
     const normalizedSkillName = this.normalizeSkillName(skillName);
-    
+
     // If stored memory is empty, this is the first time - send as model memory
     if (this.isFirstTimeInteraction(storedMemory)) {
       return true;
     }
 
     // Check if we've already sent this skill's prompt as model memory
-    const hasSkillInMemory = storedMemory.some(event => 
+    const hasSkillInMemory = storedMemory.some(event =>
       event.skillUsed === normalizedSkillName && event.promptSentAsMemory === true
     );
 
@@ -149,7 +149,7 @@ STRICT REQUIREMENTS:
   prepareGeminiRequest(skillName, userMessage, storedMemory, programmingLanguage = null) {
     const normalizedSkillName = this.normalizeSkillName(skillName);
     const skillPrompt = this.getSkillPrompt(normalizedSkillName, programmingLanguage);
-    
+
     const requestConfig = {
       model: 'gemini-pro', // or your preferred Gemini model
       contents: [],
@@ -167,16 +167,16 @@ STRICT REQUIREMENTS:
         requestConfig.systemInstruction = {
           parts: [{ text: skillPrompt }]
         };
-        
+
         // Add user message as regular content
         requestConfig.contents.push({
           role: 'user',
           parts: [{ text: userMessage }]
         });
-        
+
         // Mark that we're sending this as model memory
         this.skillPromptSent.add(normalizedSkillName);
-        
+
         return {
           ...requestConfig,
           isUsingModelMemory: true,
@@ -193,7 +193,7 @@ STRICT REQUIREMENTS:
       role: 'user',
       parts: [{ text: userMessage }]
     });
-    
+
     return {
       ...requestConfig,
       isUsingModelMemory: false,
@@ -241,7 +241,7 @@ STRICT REQUIREMENTS:
   updateStoredMemory(storedMemory, skillName, wasModelMemoryUsed, userMessage, aiResponse, programmingLanguage = null) {
     const normalizedSkillName = this.normalizeSkillName(skillName);
     const updatedMemory = [...(storedMemory || [])];
-    
+
     const memoryEntry = {
       timestamp: new Date().toISOString(),
       skillUsed: normalizedSkillName,
@@ -251,9 +251,9 @@ STRICT REQUIREMENTS:
       action: wasModelMemoryUsed ? 'MODEL_MEMORY_SENT' : 'REGULAR_MESSAGE',
       programmingLanguage: programmingLanguage || null
     };
-    
+
     updatedMemory.push(memoryEntry);
-        
+
     return updatedMemory;
   }
 
@@ -272,7 +272,7 @@ STRICT REQUIREMENTS:
 
       // Prepare the actual API request
       const geminiRequest = this.prepareGeminiRequest(skillName, userMessage, storedMemory, programmingLanguage);
-      
+
       return {
         requestReady: true,
         geminiRequest,
@@ -280,7 +280,7 @@ STRICT REQUIREMENTS:
         needsMemoryUpdate: true,
         programmingLanguage
       };
-      
+
     } catch (error) {
       console.error('Error processing user request:', error);
       return {
@@ -316,10 +316,10 @@ STRICT REQUIREMENTS:
    */
   normalizeSkillName(skillName) {
     if (!skillName) return 'general';
-    
+
     // Convert to lowercase and handle common variations
     const normalized = skillName.toLowerCase().trim();
-    
+
     // Map common variations to standard names
     const skillMap = {
       'dsa': 'dsa',

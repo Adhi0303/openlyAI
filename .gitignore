@@ -21,4 +21,9 @@ elevate.exe
 LICENSE.electron.txt
 LICENSES.chromium.html
 
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.vosk-models/
 vk_swiftshader_icd.json

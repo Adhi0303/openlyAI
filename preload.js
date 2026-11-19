@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopSpeechRecognition: () => ipcRenderer.invoke('stop-speech-recognition'),
   sendAudioChunk: (buffer) => ipcRenderer.send('audio-chunk', { buffer }),
   getSpeechAvailability: () => ipcRenderer.invoke('get-speech-availability'),
+  sendTranscribedText: (text) => ipcRenderer.invoke('send-transcribed-text', text),
+  syncTranscribedText: (text) => ipcRenderer.invoke('sync-transcribed-text', text),
+  focusMainWindow: (focusable) => ipcRenderer.invoke('focus-main-window', focusable),
   
   // Window management
   showAllWindows: () => ipcRenderer.invoke('show-all-windows'),
@@ -97,6 +100,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Event listeners
   onTranscriptionReceived: (callback) => ipcRenderer.on('transcription-received', callback),
   onInterimTranscription: (callback) => ipcRenderer.on('interim-transcription', callback),
+  onVoskFinalFragment: (callback) => ipcRenderer.on('vosk-final-fragment', callback),
   onSpeechStatus: (callback) => ipcRenderer.on('speech-status', callback),
   onSpeechError: (callback) => ipcRenderer.on('speech-error', callback),
   onSpeechAvailability: (callback) => ipcRenderer.on('speech-availability', callback),
@@ -116,6 +120,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onInteractionModeChanged: (callback) => ipcRenderer.on('interaction-mode-changed', callback),
   onRecordingStarted: (callback) => ipcRenderer.on('recording-started', callback),
   onRecordingStopped: (callback) => ipcRenderer.on('recording-stopped', callback),
+  onTranscriptionCleared: (callback) => ipcRenderer.on('transcription-cleared', callback),
   onCodingLanguageChanged: (callback) => ipcRenderer.on('coding-language-changed', callback),
   onMainWindowShown: (callback) => ipcRenderer.on('main-window-shown', callback),
   // Clipboard-relay chat input (no tab-switch: Ctrl+Shift+. to hint, Ctrl+Shift+/ to send)

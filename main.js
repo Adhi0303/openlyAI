@@ -12,10 +12,11 @@ const { app, BrowserWindow, globalShortcut, session, ipcMain, clipboard } = requ
 // to this same path so settings survive restarts on every platform.
 function resolveEnvPath() {
   try {
-    const userDataEnv = path.join(app.getPath("userData"), ".env");
     const projectEnv = path.join(process.cwd(), ".env");
-    // Prefer a project .env only when it already exists and userData has none
-    // (i.e. a developer running from the repo). Otherwise use userData.
+    if (app && !app.isPackaged && fs.existsSync(projectEnv)) {
+      return projectEnv;
+    }
+    const userDataEnv = app ? path.join(app.getPath("userData"), ".env") : projectEnv;
     if (!fs.existsSync(userDataEnv) && fs.existsSync(projectEnv)) {
       return projectEnv;
     }
@@ -496,11 +497,8 @@ class ApplicationController {
     ).then(text => {
       const trimmed = (text || '').trim();
 
-      // Return focus to Chrome and re-lock the window immediately
+      // Return focus to Chrome
       chatWin.blur();
-      setTimeout(() => {
-        if (!chatWin.isDestroyed()) chatWin.setFocusable(false);
-      }, 100);
 
       if (!trimmed) {
         logger.debug('Ctrl+Shift+/ pressed but textarea is empty');
@@ -513,7 +511,6 @@ class ApplicationController {
     }).catch(err => {
       logger.warn('chatSendClipboard: executeJavaScript failed', { err: err.message });
       chatWin.blur();
-      if (!chatWin.isDestroyed()) chatWin.setFocusable(false);
     });
   }
 
@@ -527,6 +524,12 @@ class ApplicationController {
     });
 
     speechService.on("transcription", (text) => {
+      if (speechService.provider === 'vosk') {
+        BrowserWindow.getAllWindows().forEach((window) => {
+          window.webContents.send("vosk-final-fragment", { text });
+        });
+        return;
+      }
       this.handleTranscriptionFragment(text);
     });
 
@@ -557,16 +560,62 @@ class ApplicationController {
   }
 
   setupIPCHandlers() {
+  ipcMain.handle("send-transcribed-text", async (event, text) => {
+    const trimmed = (text || "").trim();
+    if (!trimmed) return { success: false, error: "Empty text" };
+
+    logger.info("Sending transcribed text to LLM", { text: trimmed.substring(0, 100) });
+
+    if (speechService.isRecording) {
+      speechService.stopRecording();
+    }
+
+    speechService.syncTranscribedText("");
+    this.windowManager.broadcastToAllWindows("transcription-cleared");
+
+    (async () => {
+      try {
+        const sessionHistory = sessionManager.getOptimizedHistory();
+        await this.processWithLLM(trimmed, sessionHistory);
+      } catch (error) {
+        logger.error("Failed to process transcribed text with LLM", {
+          error: error.message,
+          text: trimmed.substring(0, 100)
+        });
+      }
+    })();
+
+    return { success: true };
+  });
+
+  ipcMain.handle("sync-transcribed-text", (event, text) => {
+    const clean = text || "";
+    speechService.syncTranscribedText(clean);
+    if (!clean.trim()) {
+      this.windowManager.broadcastToAllWindows("transcription-cleared");
+    }
+    return true;
+  });
+
+  ipcMain.handle("focus-main-window", (event, focusable) => {
+    const mainWin = windowManager.getWindow('main');
+    if (mainWin && !mainWin.isDestroyed()) {
+      if (focusable) {
+        mainWin.focus();
+      }
+    }
+    return true;
+  });
+
   ipcMain.handle("take-screenshot", () => this.triggerScreenshotOCR());
   ipcMain.handle("list-displays", () => captureService.listDisplays());
   ipcMain.handle("capture-area", (event, options) => captureService.captureAndProcess(options));
 
-  // Chat typing mode cancel (Esc in renderer) — blur window and re-lock non-focusable
+  // Chat typing mode cancel (Esc in renderer) — blur window to return focus
   ipcMain.handle("chat-cancel-input", () => {
     const chatWin = windowManager.getWindow('chat');
     if (chatWin && !chatWin.isDestroyed()) {
       chatWin.blur();
-      setTimeout(() => { if (!chatWin.isDestroyed()) chatWin.setFocusable(false); }, 100);
     }
   });
     
@@ -732,6 +781,10 @@ class ApplicationController {
       // Add chat message to session memory
       sessionManager.addUserInput(text, 'chat');
       logger.debug('Chat message added to session memory', { textLength: text.length });
+
+      // Clear any pending transcription in Vosk and broadcast to clear the nav bar capsule
+      speechService.syncTranscribedText("");
+      this.windowManager.broadcastToAllWindows("transcription-cleared");
 
       // Typed messages need the full skill pipeline (with history context),
       // NOT the voice "intelligent filter" pipeline. Voice keeps its filter

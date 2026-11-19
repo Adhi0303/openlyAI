@@ -8,14 +8,16 @@ const logger = {
 
 class MainWindowUI {
     constructor() {
-        this.isInteractive = false;
+        this.isInteractive = true;
         this.isHidden = false;
         this.currentSkill = 'dsa'; // Default, will be updated from settings
         this.statusDot = null;
         this.skillIndicator = null;
         this.micButton = null;
         this.isRecording = false;
-        this.speechAvailable = false; // track availability
+        this.speechAvailable = true; // track availability
+        this._speechPrefix = '';
+        this._userIsEditing = false;
         this._popoverHideTimeout = null;
         // Renderer-side audio capture state (used for Whisper on Windows)
         this._audioContext = null;
@@ -270,8 +272,90 @@ class MainWindowUI {
         this.skillIndicator = document.getElementById('skillIndicator');
         this.settingsIndicator = document.getElementById('settingsIndicator'); // Optional
         this.micButton = document.getElementById('micButton');
-    this.infoButton = document.getElementById('infoButton');
-    this.shortcutsPopover = document.getElementById('shortcutsPopover');
+        this.infoButton = document.getElementById('infoButton');
+        this.shortcutsPopover = document.getElementById('shortcutsPopover');
+
+        // Middle Transcription Capsule
+        this.transcriptionCapsule = document.getElementById('transcriptionCapsule');
+        this.transcriptionInput = document.getElementById('transcriptionInput');
+        this.sendTranscriptionBtn = document.getElementById('sendTranscriptionBtn');
+        this.clearTranscriptionBtn = document.getElementById('clearTranscriptionBtn');
+        this.capsuleLeftSeparator = document.getElementById('capsuleLeftSeparator');
+        this.capsuleRightSeparator = document.getElementById('capsuleRightSeparator');
+
+        if (this.transcriptionCapsule) {
+            this.transcriptionCapsule.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+            });
+            this.transcriptionCapsule.addEventListener('click', (e) => {
+                if (e.target !== this.sendTranscriptionBtn && e.target !== this.clearTranscriptionBtn &&
+                    !this.sendTranscriptionBtn?.contains(e.target) && !this.clearTranscriptionBtn?.contains(e.target)) {
+                    this.transcriptionInput?.focus();
+                }
+            });
+        }
+
+        if (this.transcriptionInput) {
+            let syncTimer = null;
+            this.transcriptionInput.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+            });
+            this.transcriptionInput.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.transcriptionInput.focus();
+            });
+            this.transcriptionInput.addEventListener('focus', () => {
+                this._userIsEditing = true;
+            });
+            this.transcriptionInput.addEventListener('blur', () => {
+                setTimeout(() => {
+                    if (document.activeElement !== this.transcriptionInput) {
+                        this._userIsEditing = false;
+                    }
+                }, 200);
+            });
+            this.transcriptionInput.addEventListener('input', () => {
+                this._userIsEditing = true;
+                this._speechPrefix = '';
+                const val = this.transcriptionInput.value;
+
+                clearTimeout(syncTimer);
+                syncTimer = setTimeout(() => {
+                    if (window.electronAPI && window.electronAPI.syncTranscribedText) {
+                        window.electronAPI.syncTranscribedText(val);
+                    }
+                }, 30);
+            });
+            this.transcriptionInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.handleSendTranscribedText();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.handleClearTranscription();
+                }
+            });
+        }
+
+        if (this.sendTranscriptionBtn) {
+            this.sendTranscriptionBtn.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+            });
+            this.sendTranscriptionBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.handleSendTranscribedText();
+            });
+        }
+
+        if (this.clearTranscriptionBtn) {
+            this.clearTranscriptionBtn.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+            });
+            this.clearTranscriptionBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.handleClearTranscription();
+            });
+        }
 
         // NEW: Screenshot button is the first .command-item without id
         const commandItems = document.querySelectorAll('.command-item');
@@ -311,27 +395,24 @@ class MainWindowUI {
         }
 
         // Add click handler for microphone
-        this.micButton.addEventListener('click', async () => {
-            if (this.isInteractive && this.speechAvailable) {
-                try {
-                    if (this.isRecording) {
-                        await window.electronAPI.stopSpeechRecognition();
-                    } else {
-                        await window.electronAPI.startSpeechRecognition();
-                    }
-                } catch (error) {
-                    logger.error('Speech recognition toggle failed', {
-                        component: 'MainWindowUI',
-                        error: error.message
-                    });
-                    this.isRecording = false;
-                    this.updateMicButtonState();
+        this.micButton.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+        });
+        this.micButton.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+                if (this.isRecording) {
+                    await window.electronAPI.stopSpeechRecognition();
+                } else {
+                    await window.electronAPI.startSpeechRecognition();
                 }
-            } else if (this.isInteractive && !this.speechAvailable) {
-                logger.warn('Mic clicked but speech recognition is not available', {
-                    component: 'MainWindowUI'
+            } catch (error) {
+                logger.error('Speech recognition toggle failed', {
+                    component: 'MainWindowUI',
+                    error: error.message
                 });
-                this.loadSpeechAvailability();
+                this.isRecording = false;
+                this.updateMicButtonState();
             }
         });
 
@@ -409,8 +490,13 @@ class MainWindowUI {
             let lastY = 0;
 
             const INTERACTIVE_TAGS = new Set(['BUTTON', 'SELECT', 'INPUT', 'TEXTAREA', 'A']);
-            const INTERACTIVE_IDS  = new Set(['micButton', 'skillIndicator', 'infoButton',
-                                              'settingsIndicator', 'languageSelector', 'codingLanguage']);
+            const INTERACTIVE_IDS  = new Set([
+                'micButton', 'skillIndicator', 'infoButton',
+                'settingsIndicator', 'languageSelector', 'codingLanguage',
+                'screenshotButton',
+                'transcriptionCapsule', 'transcriptionInput',
+                'sendTranscriptionBtn', 'clearTranscriptionBtn', 'capsuleLiveDot'
+            ]);
 
             const isInteractiveTarget = (el) => {
                 // Walk up from the clicked element to the bar
@@ -419,8 +505,12 @@ class MainWindowUI {
                     if (INTERACTIVE_TAGS.has(node.tagName)) return true;
                     if (node.id && INTERACTIVE_IDS.has(node.id)) return true;
                     // Any element that carries its own click handler is interactive
-                    if (node.classList && node.classList.contains('command-item') &&
-                        node.id && node.id !== '') return true;
+                    if (node.classList && (
+                        node.classList.contains('command-item') ||
+                        node.classList.contains('capsule-btn') ||
+                        node.classList.contains('transcription-capsule') ||
+                        node.classList.contains('transcription-input')
+                    )) return true;
                     node = node.parentElement;
                 }
                 return false;
@@ -488,6 +578,28 @@ class MainWindowUI {
                 this.speechAvailable = !!(data && data.available);
                 this.applyMicVisibility();
             });
+
+            // Live streaming transcription events (Vosk / STT)
+            window.electronAPI.onInterimTranscription((event, data) => {
+                const text = (data && typeof data === 'object') ? data.text : data;
+                this.setTranscriptionText(text);
+            });
+
+            window.electronAPI.onVoskFinalFragment((event, data) => {
+                const text = (data && typeof data === 'object') ? data.text : data;
+                this.setTranscriptionText(text);
+            });
+
+            if (window.electronAPI.onTranscriptionCleared) {
+                window.electronAPI.onTranscriptionCleared(() => {
+                    this._speechPrefix = '';
+                    this._userIsEditing = false;
+                    if (this.transcriptionInput) {
+                        this.transcriptionInput.value = '';
+                    }
+                    this.showTranscriptionCapsule(false);
+                });
+            }
 
             // Listen for coding language changes from other windows
             window.electronAPI.onCodingLanguageChanged((event, data) => {
@@ -689,11 +801,92 @@ class MainWindowUI {
         logger.debug('Screenshot request received', { component: 'MainWindowUI' });
     }
 
+    showTranscriptionCapsule(show = true) {
+        if (!this.transcriptionCapsule) return;
+        if (show) {
+            this.transcriptionCapsule.classList.add('active');
+            if (this.capsuleLeftSeparator) this.capsuleLeftSeparator.style.display = 'block';
+            if (this.capsuleRightSeparator) this.capsuleRightSeparator.style.display = 'block';
+        } else {
+            this.transcriptionCapsule.classList.remove('active');
+            if (this.capsuleLeftSeparator) this.capsuleLeftSeparator.style.display = 'none';
+            if (this.capsuleRightSeparator) this.capsuleRightSeparator.style.display = 'none';
+        }
+        setTimeout(() => this.resizeWindowToContent(), 50);
+    }
+
+    setTranscriptionText(text) {
+        if (!this.transcriptionInput) return;
+        // Never overwrite if user is actively focusing, deleting, or typing!
+        if (this._userIsEditing || document.activeElement === this.transcriptionInput) {
+            return;
+        }
+
+        const clean = (text || '').trim();
+        if (!clean) return;
+
+        this.showTranscriptionCapsule(true);
+        if (this._speechPrefix) {
+            this.transcriptionInput.value = `${this._speechPrefix} ${clean}`;
+        } else {
+            this.transcriptionInput.value = clean;
+        }
+        if (document.activeElement !== this.transcriptionInput) {
+            this.transcriptionInput.scrollLeft = this.transcriptionInput.scrollWidth;
+        }
+    }
+
+    handleSendTranscribedText() {
+        if (!this.transcriptionInput) return;
+        const text = this.transcriptionInput.value.trim();
+        if (!text) return;
+
+        this._speechPrefix = '';
+        logger.info('User dispatched transcribed text to AI', { text });
+        if (window.electronAPI && window.electronAPI.sendTranscribedText) {
+            window.electronAPI.sendTranscribedText(text);
+        }
+
+        if (this.isRecording && window.electronAPI && window.electronAPI.stopSpeechRecognition) {
+            window.electronAPI.stopSpeechRecognition();
+        }
+
+        this.transcriptionInput.value = '';
+        this.showTranscriptionCapsule(false);
+        if (window.electronAPI && window.electronAPI.focusMainWindow) {
+            window.electronAPI.focusMainWindow(false);
+        }
+    }
+
+    handleClearTranscription() {
+        this._speechPrefix = '';
+        this._userIsEditing = false;
+        if (this.transcriptionInput) {
+            this.transcriptionInput.value = '';
+        }
+        if (window.electronAPI && window.electronAPI.syncTranscribedText) {
+            window.electronAPI.syncTranscribedText('');
+        }
+        this.showTranscriptionCapsule(false);
+        if (this.isRecording && window.electronAPI && window.electronAPI.stopSpeechRecognition) {
+            window.electronAPI.stopSpeechRecognition();
+        }
+        if (window.electronAPI && window.electronAPI.focusMainWindow) {
+            window.electronAPI.focusMainWindow(false);
+        }
+    }
+
     handleRecordingStarted() {
         this.isRecording = true;
+        this._speechPrefix = '';
+        this._userIsEditing = false;
+        if (this.transcriptionInput) {
+            this.transcriptionInput.value = '';
+        }
         if (this.micButton) {
             this.micButton.classList.add('recording');
         }
+        this.showTranscriptionCapsule(true);
         // On Windows and macOS, Whisper audio is captured here in the renderer
         // (Web Audio API) rather than the main process: Windows lacks sox/rec/
         // arecord, and macOS avoids an unbundled Homebrew `sox`. Must match the
@@ -712,10 +905,14 @@ class MainWindowUI {
 
     handleRecordingStopped() {
         this.isRecording = false;
+        this._speechPrefix = '';
         if (this.micButton) {
             this.micButton.classList.remove('recording');
         }
         this._stopRendererAudioCapture();
+        if (this.transcriptionInput && !this.transcriptionInput.value.trim()) {
+            this.showTranscriptionCapsule(false);
+        }
         logger.debug('Recording stopped', { component: 'MainWindowUI' });
     }
 

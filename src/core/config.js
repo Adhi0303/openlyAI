@@ -57,7 +57,7 @@ class ConfigManager {
       },
 
       speech: {
-        provider: 'azure',
+        provider: 'vosk',
         azure: {
           language: 'en-US',
           enableDictation: true,

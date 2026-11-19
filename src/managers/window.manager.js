@@ -38,7 +38,7 @@ class WindowManager {
     
     this.windowConfigs = {
       main: {
-        width: 520,
+        width: 720,
         height: 35,
         useContentSize: true,
         file: 'index.html',
@@ -359,9 +359,8 @@ class WindowManager {
         hasShadow: false,
         useContentSize: windowConfig.useContentSize || false,
         thickFrame: false,
-        // focusable: false — navbar only has buttons, no text input needed.
-        // Prevents stealing focus from Chrome (which triggers tab-switch warnings).
-        focusable: false,
+        // focusable: true allows keyboard focus and clicks on inputs and buttons
+        focusable: true,
         ...(process.platform === 'darwin' && {
           titleBarStyle: 'hiddenInset',
           trafficLightPosition: { x: -100, y: -100 },
@@ -410,7 +409,7 @@ class WindowManager {
         maximizable: false,
         closable: false,
         hasShadow: true,
-        focusable: false,
+        focusable: true,
         ...(process.platform === 'darwin' && {
           titleBarStyle: 'hiddenInset',
           trafficLightPosition: { x: -100, y: -100 },

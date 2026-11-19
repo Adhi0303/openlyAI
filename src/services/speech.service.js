@@ -387,6 +387,7 @@ const { EventEmitter } = require('events');
 const logger = require('../core/logger').createServiceLogger('SPEECH');
 const config = require('../core/config');
 const WhisperWorkerService = require('./whisper-worker.service');
+const VoskWorkerService = require('./vosk-worker.service');
 
 let sdk = null;
 try {
@@ -426,6 +427,16 @@ class SpeechService extends EventEmitter {
     this.audioProgram = null;
     this.whisperCommand = null;
     this.whisperWorker = new WhisperWorkerService();
+    this.voskWorker = new VoskWorkerService();
+    this.voskWorker.on('partial', (text) => {
+      this.emit('interim-transcription', text);
+    });
+    this.voskWorker.on('final', (text) => {
+      this.emit('transcription', text);
+    });
+    this.voskWorker.on('error', (err) => {
+      this.emit('error', err.message || String(err));
+    });
     this.isProcessingAudio = false;
     this.manualStopRequested = false;
     this._resetVadState();
@@ -443,6 +454,11 @@ class SpeechService extends EventEmitter {
     const provider = this._getConfiguredProvider();
     this.provider = provider;
 
+    if (provider === 'vosk') {
+      this._initializeVoskClient();
+      return;
+    }
+
     if (provider === 'azure') {
       this._initializeAzureClient();
       return;
@@ -453,9 +469,38 @@ class SpeechService extends EventEmitter {
       return;
     }
 
-    const reason = 'Speech recognition disabled. Configure Azure or local Whisper.';
+    const reason = 'Speech recognition disabled. Configure Vosk, Azure, or local Whisper.';
     logger.warn(reason);
     this.emit('status', reason);
+  }
+
+  _initializeVoskClient() {
+    try {
+      if (!this.voskWorker || !this.voskWorker.isAvailable()) {
+        throw new Error('Vosk is not available in Python environment or model is missing');
+      }
+      this.available = true;
+      this.voskWorker.start();
+      logger.info('Vosk streaming speech service initialized successfully');
+      this.emit('status', 'Local Vosk ready');
+    } catch (error) {
+      logger.error('Failed to initialize local Vosk client', { error: error.message });
+      this.available = false;
+      this.emit('status', 'Local Vosk unavailable');
+    }
+  }
+
+  _startVoskRecording() {
+    this.isRecording = true;
+    this.emit('recording-started');
+    this.emit('status', 'Listening (offline Vosk)…');
+    if (this.voskWorker) {
+      this.voskWorker.reset();
+    }
+    this.useRendererCapture = process.platform === 'win32' || process.platform === 'darwin';
+    if (!this.useRendererCapture) {
+      this._startMicrophoneCapture();
+    }
   }
 
   _initializeAzureClient() {
@@ -560,6 +605,11 @@ class SpeechService extends EventEmitter {
 
       this.sessionStartTime = Date.now();
       this.retryCount = 0;
+
+      if (this.provider === 'vosk') {
+        this._startVoskRecording();
+        return;
+      }
 
       if (this.provider === 'azure') {
         this._startAzureRecording();
@@ -788,14 +838,24 @@ class SpeechService extends EventEmitter {
    * the current Whisper segment buffer.
    */
   handleAudioChunkFromRenderer(chunk) {
-    if (!this.isRecording || this.provider !== 'whisper' || !this.useRendererCapture) {
+    if (!this.isRecording) {
       return;
     }
     if (!chunk || !chunk.length) {
       return;
     }
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    this._ingestWhisperAudio(buffer);
+
+    if (this.provider === 'vosk') {
+      if (this.voskWorker) {
+        this.voskWorker.sendChunk(buffer);
+      }
+      return;
+    }
+
+    if (this.provider === 'whisper' && this.useRendererCapture) {
+      this._ingestWhisperAudio(buffer);
+    }
   }
 
   /**
@@ -956,6 +1016,18 @@ class SpeechService extends EventEmitter {
       sessionDuration: `${sessionDuration}ms`
     });
 
+    if (this.provider === 'vosk') {
+      if (this.voskWorker) {
+        if (!this.voskWorker.completedText) {
+          this.voskWorker.reset();
+        } else {
+          this.voskWorker.finish();
+        }
+      }
+      this._finalizeStop('Listening stopped');
+      return;
+    }
+
     if (this.provider === 'azure' && this.recognizer) {
       try {
         this.recognizer.stopContinuousRecognitionAsync(
@@ -983,6 +1055,16 @@ class SpeechService extends EventEmitter {
     }
 
     this._finalizeStop('Recording stopped');
+  }
+
+  syncTranscribedText(text) {
+    if (this.voskWorker) {
+      if (!text || !text.trim()) {
+        this.voskWorker.reset();
+      } else {
+        this.voskWorker.syncText(text);
+      }
+    }
   }
 
   async _finalizeWhisperStop({ captureAlreadyStopped = false } = {}) {
@@ -1190,6 +1272,10 @@ class SpeechService extends EventEmitter {
       return !!this.speechConfig && !!this.available;
     }
 
+    if (this.provider === 'vosk') {
+      return !!this.voskWorker && !!this.available;
+    }
+
     if (this.provider === 'whisper') {
       return !!this.whisperCommand && !!this.available;
     }
@@ -1198,6 +1284,9 @@ class SpeechService extends EventEmitter {
   }
 
   isManualCaptureMode() {
+    if (this.provider === 'vosk') {
+      return true; // Vosk uses manual Send mode by design!
+    }
     return this.provider === 'whisper' && this._getWhisperCaptureMode() === 'manual';
   }
 
@@ -1205,7 +1294,12 @@ class SpeechService extends EventEmitter {
     this.isRecording = false;
     this.isProcessingAudio = false;
     this._cleanup();
-    this.whisperWorker.close();
+    if (this.whisperWorker && typeof this.whisperWorker.close === 'function') {
+      this.whisperWorker.close();
+    }
+    if (this.voskWorker) {
+      this.voskWorker.stop();
+    }
   }
 
   updateSettings(settings = {}) {
@@ -1227,20 +1321,8 @@ class SpeechService extends EventEmitter {
   }
 
   _getConfiguredProvider() {
-    const provider = String(this._getSetting('speechProvider') || process.env.SPEECH_PROVIDER || '').trim().toLowerCase();
-
-    if (provider === 'azure' || provider === 'whisper') {
-      return provider;
-    }
-
-    const hasAzure = !!((this._getSetting('azureKey') || process.env.AZURE_SPEECH_KEY) &&
-      (this._getSetting('azureRegion') || process.env.AZURE_SPEECH_REGION));
-
-    if (hasAzure) {
-      return 'azure';
-    }
-
-    return 'whisper';
+    // Dedicated offline Vosk speech recognition engine
+    return 'vosk';
   }
 
   _getWhisperModel() {
