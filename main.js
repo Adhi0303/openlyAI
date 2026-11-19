@@ -571,7 +571,7 @@ class ApplicationController {
     }
 
     speechService.syncTranscribedText("");
-    this.windowManager.broadcastToAllWindows("transcription-cleared");
+    windowManager.broadcastToAllWindows("transcription-cleared");
 
     (async () => {
       try {
@@ -592,7 +592,7 @@ class ApplicationController {
     const clean = text || "";
     speechService.syncTranscribedText(clean);
     if (!clean.trim()) {
-      this.windowManager.broadcastToAllWindows("transcription-cleared");
+      windowManager.broadcastToAllWindows("transcription-cleared");
     }
     return true;
   });
@@ -784,7 +784,7 @@ class ApplicationController {
 
       // Clear any pending transcription in Vosk and broadcast to clear the nav bar capsule
       speechService.syncTranscribedText("");
-      this.windowManager.broadcastToAllWindows("transcription-cleared");
+      windowManager.broadcastToAllWindows("transcription-cleared");
 
       // Typed messages need the full skill pipeline (with history context),
       // NOT the voice "intelligent filter" pipeline. Voice keeps its filter
